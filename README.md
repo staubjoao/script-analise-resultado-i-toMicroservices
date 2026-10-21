@@ -83,12 +83,16 @@ python -m analise_estudo --root ... --group-by persona
 
 ```
 resultados/
-  indicadores_por_execucao.csv   # 1 linha por execução (base para a estatística)
   por_sistema/
+    spring-petclinic.csv         # 1 CSV por sistema (1 linha por execução)
     spring-petclinic.json        # limites, Z* e execuções do sistema
+    jpetstore.csv
     jpetstore.json
   resumo.json                    # configuração usada + contagens
 ```
+
+Cada CSV contém apenas as execuções do seu sistema (a coluna `sistema` permanece
+para rastreabilidade). É esse CSV por sistema que os scripts em `R/` consomem.
 
 Colunas do CSV:
 

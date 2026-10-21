@@ -1,7 +1,7 @@
 """Etapa 7 — Exportação dos resultados.
 
 Saída organizada em:
-- ``indicadores_por_execucao.csv`` — uma linha por execução (para análise/estatística);
+- ``por_sistema/<sistema>.csv`` — uma linha por execução (UM CSV POR SISTEMA);
 - ``por_sistema/<grupo>.json`` — detalhe por grupo (limites, Z* e execuções);
 - ``resumo.json`` — configuração usada, contagens e grupos ignorados.
 """
@@ -46,14 +46,22 @@ CSV_COLUMNS = [
 ]
 
 
-def write_csv(results: dict[str, SystemResult], out_path: Path) -> None:
-    """Escreve a tabela por execução (CSV)."""
-    out_path = Path(out_path)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(out_path, "w", newline="", encoding="utf-8") as handle:
-        writer = csv.writer(handle)
-        writer.writerow(CSV_COLUMNS)
-        for key in sorted(results):
+def write_csv(results: dict[str, SystemResult], out_dir: Path) -> list[Path]:
+    """Escreve **um CSV por sistema** em ``<out_dir>/por_sistema/<sistema>.csv``.
+
+    Retorna a lista de arquivos escritos. Cada CSV contém apenas as execuções
+    daquele sistema (a coluna ``sistema`` permanece para rastreabilidade).
+    """
+    out_dir = Path(out_dir)
+    per_system_dir = out_dir / "por_sistema"
+    per_system_dir.mkdir(parents=True, exist_ok=True)
+
+    written: list[Path] = []
+    for key in sorted(results):
+        path = per_system_dir / f"{_safe_filename(key)}.csv"
+        with open(path, "w", newline="", encoding="utf-8") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(CSV_COLUMNS)
             for execution in results[key].executions:
                 record = execution.record
                 writer.writerow([
@@ -73,6 +81,8 @@ def write_csv(results: dict[str, SystemResult], out_path: Path) -> None:
                     _clean(execution.spacing),
                     record.source_zip,
                 ])
+        written.append(path)
+    return written
 
 
 def _system_payload(system_result: SystemResult) -> dict:
