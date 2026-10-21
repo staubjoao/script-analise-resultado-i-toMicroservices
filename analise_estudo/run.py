@@ -78,7 +78,7 @@ def main(argv: list[str] | None = None) -> None:
     )
 
     out_dir = Path(args.out)
-    export.write_csv(results, out_dir / "indicadores_por_execucao.csv")
+    csv_paths = export.write_csv(results, out_dir)
     export.write_json(
         results, out_dir,
         skipped=skipped_groups,
@@ -89,6 +89,9 @@ def main(argv: list[str] | None = None) -> None:
             "skipped_zips": skipped_zips,
         },
     )
+
+    for path in csv_paths:
+        print(f"CSV: {path}")
 
     for key in sorted(results):
         group = results[key]
