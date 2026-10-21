@@ -1,168 +1,109 @@
-# Análise estatística em R (HV, IGD+, ED)
+# Base de análise estatística em R (HV, IGD+, ED)
 
-Scripts para avaliar os resultados exportados pelo pipeline Python, seguindo o
-fluxo: **pressupostos → teste global → pós-hoc + FDR-BH → tamanho de efeito**.
+Este diretório é um **ponto de partida** para a análise estatística dos
+resultados. A ideia é que o participante **rode os passos** e leia/adapte o
+código — não que receba um relatório pronto.
+
+- `funcoes.R` — funções auxiliares (Levene, Dunn, A12 etc.).
+- `analise_estatistica.R` — script guiado, com os passos numerados e comentados.
 
 ## Premissa: 1 CSV = 1 persona × 1 sistema
 
-O pipeline Python gera **um CSV por sistema** (em `por_sistema/`). Cada grupo
-analisa **uma persona**, então cada arquivo corresponde a **uma persona e um
-sistema**.
+O pipeline Python gera **um CSV por sistema** em
+`analise_estudo/resultados/por_sistema/<sistema>.csv`. Cada grupo analisa **uma
+persona**, então cada arquivo tem **uma persona e um sistema**.
 
 - **Unidade de análise:** **indicador** (`hv`, `igd_plus`, `ed_media`, `ed_min`).
 - O sistema já está fixado pelo CSV.
-- Em cada indicador há **8 configurações**, com **n = 5 execuções independentes**
-  cada.
+- Em cada indicador há **8 configurações**, com **n = 5 execuções
+  independentes** cada.
 
-O script valida que o CSV tem **exatamente uma persona e um sistema**; se não
-tiver, interrompe com mensagem clara.
+## O CSV (como os dados são apresentados)
 
-## Requisitos
-
-- R >= 4.x
-- **Apenas base R** (sem pacotes externos). Levene e Dunn estão implementados no
-  próprio script.
-
-## Entrada
-
-O CSV por sistema gerado por `python -m analise_estudo`:
-
-```
-analise_estudo/resultados/
-  por_sistema/
-    spring-petclinic.csv
-    jpetstore.csv
-    spring-petclinic.json
-    jpetstore.json
-```
-
-Colunas:
+Uma linha por execução, 40 linhas (8 configurações × 5). Colunas:
 
 `persona, participante, config, sistema, repeticao, geracao, completo, n_pontos,
 n_duplicados, hv, igd_plus, ed_media, ed_min, spacing, source_zip`
 
-O script:
+Exemplo de linhas:
 
-- normaliza `completo` (o Python grava `True`/`False` como texto);
-- usa apenas execuções `completo = TRUE` e `n_pontos > 0`;
-- descarta valores ausentes (`NA`) do indicador;
-- avisa quando alguma configuração não tem exatamente `n = 5`.
-
-## Passo a passo para rodar a partir do CSV
-
-1. **Gere os CSVs com o pipeline Python** (ou receba os arquivos):
-
-```bash
-python -m analise_estudo --root /caminho/dados --out analise_estudo/resultados
+```
+persona,config,sistema,repeticao,completo,hv,igd_plus,ed_media,...
+P2-Systematic-Decoupler,nsgaiii__elit_on__penalty,spring-petclinic,1,True,0.771,0.181,...
+P2-Systematic-Decoupler,nsgaiii__elit_on__penalty,spring-petclinic,2,True,0.824,0.161,...
+...
 ```
 
-Isso produz um CSV por sistema em `analise_estudo/resultados/por_sistema/`.
+O script lê esse CSV, seleciona o indicador e a configuração, e monta os
+vetores de valores para cada teste.
 
-2. **Tenha o CSV do sistema** que será analisado. Se vier pelo Drive, baixe-o
-   para uma pasta local (ex.: `Downloads/spring-petclinic.csv`).
+## Requisitos
 
-3. **Confirme o R instalado:**
+- R >= 4.x
+- **Apenas base R** (sem pacotes externos). Levene e Dunn estão implementados em
+  `funcoes.R`.
 
-```bash
-Rscript --version
-```
+## Como rodar
 
-4. **Rode o script** (da raiz do repositório). Sem argumentos, ele **pergunta o
-   caminho do CSV**:
+1. Tenha o CSV de **um sistema** (ex.:
+   `analise_estudo/resultados/por_sistema/spring-petclinic.csv`).
+
+2. Rode:
 
 ```bash
 Rscript R/analise_estatistica.R
 ```
 
-Quando solicitado, **cole o caminho** do arquivo (ou arraste o arquivo para o
-terminal). O script aceita caminhos com aspas, espaços e `~` e, se o caminho não
-existir, pergunta novamente (até 3 vezes). A saída vai para `resultados_R/`.
+Quando solicitado, **cole o caminho** do CSV (aceita aspas, espaços e `~`).
 
-Também é possível informar o caminho direto como argumento:
+Ou passe o caminho e o indicador como argumentos:
 
 ```bash
-# <csv> [saida] [indicador]
-Rscript R/analise_estatistica.R "/caminho/spring-petclinic.csv" "resultados_R"
-
-# só alguns indicadores
-Rscript R/analise_estatistica.R "/caminho/spring-petclinic.csv" "resultados_R" "hv,igd_plus"
+Rscript R/analise_estatistica.R "/caminho/spring-petclinic.csv" "hv"
 ```
 
-5. **Veja o resumo consolidado**:
+3. Escolha o indicador: passe como **segundo argumento** (recomendado) ou edite o
+   valor padrão na seção 0 (`indicador <- if (...) args[2] else "hv"`).
+   Indicadores: `hv`, `igd_plus`, `ed_media`, `ed_min` (e, opcionalmente, `spacing`).
 
 ```bash
-column -s, -t resultados_R/resumo_estatistico.csv
+Rscript R/analise_estatistica.R "/caminho/spring-petclinic.csv" "igd_plus"
 ```
 
-6. **Abra as saídas por indicador** em `resultados_R/<sistema>/<indicador>/`:
-   - `pressuposto_shapiro.csv`;
-   - `pressuposto_levene.csv`;
-   - `teste_global.csv`;
-   - `posthoc_fdr_bh.csv` (só se o global for significativo);
-   - `tamanho_efeito_a12.csv`;
-   - `graficos.pdf` (boxplot + Q-Q + histogramas).
+## O que o script faz (seções)
 
-7. **Interprete** na ordem:
-   - Pressupostos: normalidade (Shapiro) e variâncias (Levene);
-   - Teste global: se `p > 0,05`, para; se `p ≤ 0,05`, veja o pós-hoc;
-   - Pós-hoc: significância sobre o **p ajustado (FDR-BH)**, não o bruto;
-   - A12: magnitude e direção, para **todos** os pares.
+0. **Configuração** — caminho do CSV, indicador, `alfa`, `forcar_kruskal`.
+1. **Leitura e inspeção** — valida persona/sistema, unicidade de
+   `(config, repeticao)`, geração final, e mostra linhas brutas x válidas por
+   configuração (deve ser 5).
+2. **Descritiva** — resumo por configuração, boxplot e Q-Q plots.
+3. **Shapiro-Wilk** por configuração (normalidade).
+4. **Levene** (homogeneidade das variâncias).
+5. **Teste global** — ANOVA se os dois pressupostos valem; senão Kruskal-Wallis.
+6. **Pós-hoc + FDR-BH** — Tukey (ANOVA) ou Dunn (Kruskal), só se o global for
+   significativo. Em `p_teste`, o Tukey já vem ajustado; o BH é uma camada extra.
+7. **Vargha-Delaney A12** para todos os 28 pares, com direção e magnitude.
+8. **Opcional** — bloco comentado para salvar os resultados, se o participante
+   quiser.
 
-## Saída
+## Interpretação
 
-```
-resultados_R/
-  resumo_estatistico.csv                    # 1 linha por indicador
-  <sistema>/<indicador>/
-    pressuposto_shapiro.csv
-    pressuposto_levene.csv
-    teste_global.csv
-    posthoc_fdr_bh.csv                      # só se o global for significativo
-    tamanho_efeito_a12.csv                  # todos os 28 pares
-    graficos.pdf                            # boxplot + Q-Q + histogramas
-```
-
-## Fluxo estatístico
-
-1. **Shapiro-Wilk** por configuração (H0: normalidade). `p > 0,05` → normalidade
-   plausível.
-2. **Levene** (centrado na mediana) para homogeneidade das variâncias.
-3. **Teste global**:
-   - ambos os pressupostos atendidos → **ANOVA de uma via**;
-   - caso contrário (ou `forcar_kruskal = TRUE`) → **Kruskal-Wallis**;
-   - `p > 0,05` → sem diferença significativa; **não** há pós-hoc.
-4. **Pós-hoc** (se global significativo):
-   - após ANOVA → **Tukey HSD**;
-   - após Kruskal → **Dunn** (com correção de empates);
-   - p-valores corrigidos por **FDR-BH** (`p.adjust(..., "BH")`); significância
-     sobre o p ajustado (`≤ 0,05`).
-5. **Vargha-Delaney A12** para **todos** os 28 pares (independente do p):
-   `A12 = P(A melhor que B) + 0,5 · P(A = B)`, respeitando a direção:
-   - **HV**: maior é melhor (A melhor = A > B);
-   - **IGD+ / ED**: menor é melhor (A melhor = A < B; o script inverte o sinal
-     internamente).
-   - Magnitude: Desprezível (|A12−0,5| ≤ 0,06), Pequena (≤ 0,14), Média (≤ 0,21),
-     Grande (> 0,21).
-
-Parâmetros no topo do script: `forcar_kruskal` (use `TRUE` para adotar
-Kruskal-Wallis como escolha conservadora) e `exigir_n` (padrão 5).
-
-## Observações sobre o formato exportado
-
-- **`completo`** sai como `True`/`False` (booleano do Python). O R normaliza isso,
-  mas para interoperabilidade seria melhor exportar `1/0` (ou `TRUE/FALSE`).
-  Se quiser, ajustamos o `export.py`.
-- **Valores ausentes**: IGD+/ED podem vir vazios quando não há fronteira válida;
-  o R lê como `NA` e remove a linha. Se sobrar menos de 5 execuções em alguma
-  configuração, o script emite aviso (n < 5 enfraquece ainda mais os testes).
-- **`config`** usa o `configId` real. Se a análise precisar ser cega, adicione
-  `configLabel` ao CSV.
-- **ED**: o CSV traz `ed_media` e `ed_min`; por padrão o script roda ambos.
+- **Shapiro**: `p > 0,05` → normalidade plausível. Com n = 5, o teste tem baixo
+  poder; interprete com cautela.
+- **Levene**: `p > 0,05` → variâncias homogêneas.
+- **Global**: `p > 0,05` → sem diferença e o pós-hoc se encerra (o A12 continua);
+  `p ≤ 0,05` → ao menos uma configuração difere (o global não diz qual).
+- **Pós-hoc**: significância sobre o **p ajustado (FDR-BH)**. No Tukey, `p_teste`
+  já é ajustado; no Dunn, é o p bruto.
+- **A12**: `A12 > 0,5` → A tende a superar B; `A12 < 0,5` → B tende a superar A.
+  - Direção: **HV** maior melhor; **IGD+ / ED** menor melhor.
+  - Magnitude: Desprezível (|A12−0,5| ≤ 0,06), Pequena (≤ 0,14), Média (≤ 0,21),
+    Grande (> 0,21).
+  - Com n = 5, o A12 é discreto (múltiplos de 0,04) e aproximado.
 
 ## Limitações (registrar no texto)
 
 - Com n = 5, Shapiro-Wilk tem baixo poder e Q-Q/histogramas são pouco conclusivos.
 - Com 28 comparações e n = 5, espera-se que poucos pares sobrevivam ao FDR-BH.
-- O A12 assume valores discretos (múltiplos de 0,04) e é uma estimativa aproximada.
 - O tamanho de efeito não depende do p-valor: destaque efeitos grandes mesmo sem
   p ajustado ≤ 0,05.

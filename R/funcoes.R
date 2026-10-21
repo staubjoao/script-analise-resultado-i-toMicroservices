@@ -78,6 +78,9 @@ preparar_grupo <- function(df, sistema, indicador, exigir_n = 5) {
   if (length(tab) < 2) {
     stop("menos de 2 configurações com dados para comparar")
   }
+  if (any(tab < 3)) {
+    warning("alguma configuração tem n < 3: os testes e o A12 são pouco confiáveis")
+  }
   if (any(tab != exigir_n)) {
     warning(sprintf(
       "n por configuração diferente de %d: %s",
@@ -121,12 +124,13 @@ levene_test <- function(valor, grupo, center = median) {
 }
 
 #' Roda todos os pressupostos e decide o teste global.
-verificar_pressupostos <- function(d, forcar_kruskal = FALSE) {
+#' (Não é usada pela base guiada; mantida como utilitário.)
+verificar_pressupostos <- function(d, alfa = 0.05, forcar_kruskal = FALSE) {
   shapiro <- shapiro_por_grupo(d)
   levene <- levene_test(d$valor, d$config)
 
-  normalidade_ok <- all(!is.na(shapiro$p) & shapiro$p > 0.05)
-  levene_ok <- !is.na(levene$p) && levene$p > 0.05
+  normalidade_ok <- all(!is.na(shapiro$p) & shapiro$p > alfa)
+  levene_ok <- !is.na(levene$p) && levene$p > alfa
   usar_anova <- normalidade_ok && levene_ok && !forcar_kruskal
 
   list(
@@ -188,28 +192,29 @@ dunn_pairwise <- function(valor, grupo) {
       z <- if (denom > 0) (mean(ra) - mean(rb)) / denom else NA_real_
       p <- if (is.na(z)) NA_real_ else 2 * pnorm(-abs(z))
       linhas[[length(linhas) + 1]] <- data.frame(
-        comparacao = paste(a, "-", b), z = z, p_bruto = p
+        comparacao = paste(a, "-", b), z = z, p_teste = p
       )
     }
   }
   do.call(rbind, linhas)
 }
 
-#' Pós-hoc com FDR-BH. Após ANOVA usa Tukey HSD; após Kruskal usa Dunn.
-posthoc <- function(d, usar_anova) {
+#' Pós-hoc com FDR-BH. Após ANOVA usa Tukey HSD (p já ajustado pelo Tukey);
+#' após Kruskal usa Dunn (p bruto). Em ambos, aplica-se BH como camada extra.
+posthoc <- function(d, usar_anova, alfa = 0.05) {
   if (usar_anova) {
     tuk <- TukeyHSD(aov(valor ~ config, data = d))$config
     post <- data.frame(
       comparacao = rownames(tuk),
       diferenca = tuk[, "diff"],
-      p_bruto = tuk[, "p adj"],
+      p_teste = tuk[, "p adj"],
       stringsAsFactors = FALSE
     )
   } else {
     post <- dunn_pairwise(d$valor, d$config)
   }
-  post$p_ajustado <- p.adjust(post$p_bruto, method = "BH")
-  post$significativo <- !is.na(post$p_ajustado) & post$p_ajustado <= 0.05
+  post$p_ajustado <- p.adjust(post$p_teste, method = "BH")
+  post$significativo <- !is.na(post$p_ajustado) & post$p_ajustado <= alfa
   post
 }
 
@@ -262,33 +267,4 @@ tamanhos_efeito <- function(d, indicador) {
       stringsAsFactors = FALSE
     )
   }))
-}
-
-# --- Gráficos ----------------------------------------------------------------
-
-#' Boxplot + Q-Q + histogramas por configuração (em um PDF).
-gerar_graficos <- function(d, indicador, arquivo, titulo) {
-  niveis <- levels(d$config)
-  pdf(arquivo, width = 11, height = 8)
-
-  boxplot(valor ~ config, data = d, las = 2, main = titulo,
-          ylab = indicador, xlab = "")
-
-  ncol_painel <- min(4, length(niveis))
-  nrow_painel <- ceiling(length(niveis) / ncol_painel)
-
-  par(mfrow = c(nrow_painel, ncol_painel), mar = c(4, 4, 2, 1))
-  for (k in niveis) {
-    x <- d$valor[d$config == k]
-    qqnorm(x, main = paste0("Q-Q: ", k))
-    qqline(x, col = "red")
-  }
-
-  par(mfrow = c(nrow_painel, ncol_painel), mar = c(4, 4, 2, 1))
-  for (k in niveis) {
-    x <- d$valor[d$config == k]
-    hist(x, main = paste0("Hist: ", k), xlab = indicador)
-  }
-
-  dev.off()
 }
