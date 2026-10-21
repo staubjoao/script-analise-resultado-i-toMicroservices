@@ -63,7 +63,21 @@ python organizar_zip.py --src /caminho/zips_planos --dst /caminho/dados_organiza
 python -m analise_estudo --root /caminho/dados_organizados --out analise_estudo/resultados
 ```
 
-Se `--out` for omitido, a saída vai para `analise_estudo/resultados`.
+Opções:
+
+| Flag | Valores | Padrão | Efeito |
+|---|---|---|---|
+| `--normalization` | `pooled`, `embedded` | `pooled` | Limites de normalização (conjuntos do run atual ou referência fixa do ZIP) |
+| `--zstar` | `full`, `loo` | `full` | Z\* para o IGD+ (todas as execuções ou leave-one-out) |
+| `--group-by` | `system`, `persona` | `system` | Agrupa por sistema ou por persona × sistema |
+
+Exemplos:
+
+```bash
+python -m analise_estudo --root ... --zstar loo
+python -m analise_estudo --root ... --normalization embedded
+python -m analise_estudo --root ... --group-by persona
+```
 
 ## Saída
 
@@ -78,7 +92,11 @@ resultados/
 
 Colunas do CSV:
 
-`persona, config, sistema, repeticao, n_pontos, hv, igd_plus, ed_media, ed_min, spacing`
+`persona, participante, config, sistema, repeticao, geracao, completo, n_pontos, n_duplicados, hv, igd_plus, ed_media, ed_min, spacing, source_zip`
+
+- `completo`: `True` quando a fronteira é da última geração do orçamento (`run.generations`).
+- `n_pontos`/`n_duplicados`: pontos únicos e duplicatas removidas.
+- `source_zip`: rastreabilidade do arquivo de origem.
 
 Direção dos indicadores: **HV** maior é melhor; **IGD+**, **ED** e **spacing** menor
 é melhor.
@@ -86,16 +104,23 @@ Direção dos indicadores: **HV** maior é melhor; **IGD+**, **ED** e **spacing*
 ## O que o script faz
 
 1. Localiza os ZIPs em `persona_*/config_*/<sistema>/*.zip`.
-2. Lê a fronteira final crua e a identidade (manifest) de cada ZIP.
-3. Agrupa as execuções por **sistema**.
-4. Descarta linhas penalizadas (qualquer objetivo `>= 1e5`).
-5. Calcula os **limites conjuntos** (mín/máx pooled) de todas as execuções do
-   sistema e **normaliza todas com esses mesmos limites**.
-6. Constrói a **fronteira de referência Z\*** = união não-dominada de todos os pontos
-   normalizados do sistema.
-7. Calcula, por execução: **HV** (referência fixa `1.1` em cada objetivo), **IGD+**
+2. Lê a fronteira final crua e a identidade (manifest) de cada ZIP. Um ZIP inválido
+   (corrompido, JSON malformado, manifest incompleto, `metricNames` inconsistente) é
+   **descartado com aviso**, sem derrubar a análise.
+3. Agrupa as execuções por **sistema** (ou por **persona × sistema** com `--group-by persona`).
+4. Descarta linhas penalizadas (qualquer objetivo `>= 1e5`) e **deduplica** cada execução
+   (duplicatas distorcem IGD+/ED e spacing).
+5. Obtém os **limites de normalização**:
+   - `pooled` (padrão): mín/máx de todas as execuções do grupo;
+   - `embedded` (`--normalization embedded`): bounds fixos de referência do `frontiers.json`.
+6. **Normaliza** todas as execuções com esses mesmos limites.
+7. Constrói a **fronteira de referência Z\*** = união não-dominada de todos os pontos
+   normalizados do grupo. Com `--zstar loo`, o IGD+ de cada execução usa uma Z\*
+   **leave-one-out** (sem a própria execução).
+8. Calcula, por execução: **HV** (referência fixa `1.1` em cada objetivo), **IGD+**
    (contra Z\*), **ED** ao ideal `(0,0,0,0,0)` (média e mínima) e **spacing**.
-8. Exporta CSV + JSON.
+9. Exporta CSV + JSON. Um grupo sem pontos válidos é registrado como **ignorado**, sem
+   impedir os demais.
 
 ## Decisões / padronizações
 
@@ -107,6 +132,12 @@ Direção dos indicadores: **HV** maior é melhor; **IGD+**, **ED** e **spacing*
 - **HV:** ponto de referência fixo `(1.1, 1.1, 1.1, 1.1, 1.1)` no espaço normalizado.
 - **Alinhamento por nome:** as colunas são pareadas pelo **nome** do objetivo
   (`metricNames`), nunca pela posição.
+- **Deduplicação:** linhas duplicadas exatas são removidas por execução e do Z\* (afetam
+  IGD+/ED e spacing).
+- **Completude:** a geração da fronteira e o `stopReason` são lidos e exportados; runs
+  incompletos são **sinalizados** (`completo=False`), não excluídos automaticamente.
+- **Participante:** `study.participantCode` é lido e exportado (evita colisão entre
+  participantes e permite estratificar).
 - **Sem testes estatísticos:** o script entrega os indicadores por execução; os testes
   (ex.: Kruskal-Wallis, Nemenyi, Vargha-Delaney) ficam a cargo da análise.
 
@@ -138,3 +169,13 @@ Todas as constantes/limiares ficam em `analise_estudo/config.py`.
 | `analise_estudo/export.py` | Escrita de CSV e JSON |
 | `analise_estudo/run.py` | CLI (`python -m analise_estudo`) |
 | `organizar_zip.py` | Organiza ZIPs planos na estrutura `persona/config/sistema` |
+
+## Testes
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest tests -q
+```
+
+Cobrem HV 2D/3D/QMC, IGD+, ED, spacing, deduplicação, dominância/normalização,
+leave-one-out, normalização `embedded`, ZIP inválido e manifest incompleto.
