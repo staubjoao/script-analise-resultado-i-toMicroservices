@@ -20,7 +20,7 @@ def align_metric_columns(points: np.ndarray, names: tuple[str, ...],
         return points
     if set(names) != set(canonical):
         raise ValueError(
-            f"objetivos divergentes entre execuções do mesmo sistema: "
+            f"objetivos divergentes entre execuções do mesmo grupo: "
             f"{sorted(names)} != {sorted(canonical)}"
         )
     index = [names.index(metric) for metric in canonical]
@@ -36,11 +36,22 @@ def drop_penalized(points: np.ndarray, threshold: float) -> np.ndarray:
     return points[finite & under_threshold]
 
 
+def unique_rows(points: np.ndarray) -> np.ndarray:
+    """Remove linhas duplicadas exatas (preserva a ordem? não — ordena como ``np.unique``).
+
+    Duplicatas distorcem IGD+/ED (médias) e spacing (distância 0 ao vizinho).
+    Aplicar antes de calcular os indicadores e em Z*.
+    """
+    if points.size == 0:
+        return points
+    return np.unique(points, axis=0)
+
+
 def compute_bounds(populations: list[np.ndarray]) -> tuple[np.ndarray, np.ndarray]:
     """Mínimos e máximos conjuntos (pooled) por objetivo, a partir de várias fronteiras.
 
-    É a base da "normalização única por sistema": os limites são calculados uma
-    única vez e aplicados a TODAS as execuções/configurações do sistema.
+    É a base da "normalização única por grupo": os limites são calculados uma
+    única vez e aplicados a TODAS as execuções do grupo.
     """
     non_empty = [p for p in populations if p.size > 0]
     if not non_empty:
@@ -65,7 +76,7 @@ def non_dominated(points: np.ndarray) -> np.ndarray:
     """Mantém apenas as linhas não-dominadas (todos os objetivos minimizados).
 
     ``a`` domina ``b`` quando ``a <= b`` em todos os objetivos e ``a < b`` em
-    pelo menos um. Duplicatas exatas não dominam uma à outra (ambas ficam).
+    pelo menos um. A deduplicação é responsabilidade de ``unique_rows``.
     """
     n = len(points)
     if n == 0:
@@ -83,9 +94,12 @@ def non_dominated(points: np.ndarray) -> np.ndarray:
 
 
 def union_non_dominated(populations: list[np.ndarray]) -> np.ndarray:
-    """União não-dominada de várias populações — usada para construir Z*."""
+    """União não-dominada de várias populações — usada para construir Z*.
+
+    Deduplica antes de filtrar, para que Z* não carregue pontos repetidos.
+    """
     non_empty = [p for p in populations if p.size > 0]
     if not non_empty:
         return np.empty((0, 0))
-    stacked = np.vstack(non_empty)
+    stacked = unique_rows(np.vstack(non_empty))
     return non_dominated(stacked)
