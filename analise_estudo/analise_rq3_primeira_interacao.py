@@ -135,10 +135,10 @@ def factor_table(runs: pd.DataFrame, factor: str) -> pd.DataFrame:
 
 def plot(runs: pd.DataFrame, factors: pd.DataFrame) -> None:
     os.makedirs(FIG, exist_ok=True)
-    fig, axes = plt.subplots(2, 3, figsize=(10.5, 5.8), sharey=True)
+    fig, axes = plt.subplots(3, 2, figsize=(8.6, 8.6), sharey=True)
     rng = np.random.default_rng(42)
-    for row, system in enumerate(("spring-petclinic", "jpetstore")):
-        for column, persona in enumerate(("P1", "P2", "P3")):
+    for row, persona in enumerate(("P1", "P2", "P3")):
+        for column, system in enumerate(("spring-petclinic", "jpetstore")):
             ax = axes[row, column]
             cell = runs[(runs.sistema == system) & (runs.persona == persona)]
             data = [cell[cell.algoritmo == algorithm].C.dropna().values
@@ -169,9 +169,9 @@ def plot(runs: pd.DataFrame, factors: pd.DataFrame) -> None:
 
 
 def plot_lines(runs: pd.DataFrame, factors: pd.DataFrame) -> None:
-    fig, axes = plt.subplots(2, 3, figsize=(10.5, 5.8), sharey=True)
-    for row, system in enumerate(("spring-petclinic", "jpetstore")):
-        for column, persona in enumerate(("P1", "P2", "P3")):
+    fig, axes = plt.subplots(3, 2, figsize=(8.6, 8.2), sharey=True, sharex=True)
+    for row, persona in enumerate(("P1", "P2", "P3")):
+        for column, system in enumerate(("spring-petclinic", "jpetstore")):
             ax = axes[row, column]
             for algorithm in ("NSGA-III", "R-NSGA-III"):
                 cell = runs[(runs.sistema == system) & (runs.persona == persona) & (runs.algoritmo == algorithm)]
@@ -181,10 +181,10 @@ def plot_lines(runs: pd.DataFrame, factors: pd.DataFrame) -> None:
             line = factors[(factors.persona == persona) & (factors.sistema == system)
                            & (factors.desfecho == "N")].iloc[0]
             ax.set_xticks((1, 2, 3))
-            ax.set_xticklabels(("+25", "+100", "próximo\nprompt"), fontsize=8)
+            ax.set_xticklabels(("+25", "+100", "próxima\ninteração"), fontsize=8)
             ax.set_title(f"{persona} · {'Spring PetClinic' if system == 'spring-petclinic' else 'JPetStore'}",
                          fontsize=10)
-            ax.text(0.5, 0.04, f"$p_{{adj}}$ (próximo) = {line.p_adj:.3f}",
+            ax.text(0.5, 0.04, f"$p_{{adj}}$ (2ª interação) = {line.p_adj:.3f}",
                     transform=ax.transAxes, ha="center", fontsize=8)
             ax.set_ylim(0.5, 1.0)
             ax.grid(axis="y", alpha=0.25)
