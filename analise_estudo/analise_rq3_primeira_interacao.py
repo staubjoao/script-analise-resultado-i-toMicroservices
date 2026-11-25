@@ -3,7 +3,7 @@
 Desfechos por run (média das intenções da 1ª interação):
 - A: parcial em +25 (absorção);
 - C: parcial em +100 (consolidação; primário);
-- N: parcial em g2-1 (antes do segundo prompt; robustez).
+- N: parcial em g2-1 (antes da segunda interação; robustez).
 Estrita em +100 como secundária.
 
 Configuração entra como exploratória: fatores marginais (algoritmo, elitismo)
@@ -29,6 +29,7 @@ ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resultados_rq3"
 FIG = os.path.join(ROOT, "figuras")
 ALGORITHM = {f"config_{k}": ("R-NSGA-III" if k in (3, 4, 7, 8) else "NSGA-III") for k in range(1, 9)}
 ELITISM = {f"config_{k}": ("on" if k in (1, 3, 5, 7) else "off") for k in range(1, 9)}
+CONSTRAINT = {f"config_{k}": ("PENALTY" if k <= 4 else "KILL") for k in range(1, 9)}
 OUTCOMES = ("A", "C", "N")
 COLORS = {"NSGA-III": "#4C72B0", "R-NSGA-III": "#DD8452"}
 
@@ -77,12 +78,20 @@ def run_table(intents: pd.DataFrame) -> pd.DataFrame:
         N=("partial_N", "mean"),
         S_C=("strict_C", "mean"),
     ).reset_index()
+
+    # Recortes por tipo (CO_LOCATE x SEPARATE), no mesmo nível do run.
+    by_type = intents.groupby(["run", "type"]).agg(
+        C=("partial_C", "mean"), S=("strict_C", "mean")
+    ).reset_index().pivot(index="run", columns="type", values=["C", "S"])
+    by_type.columns = [f"{metric}_{kind}" for metric, kind in by_type.columns]
+    runs = runs.set_index("run").join(by_type).reset_index()
     meta = intents.drop_duplicates("run").set_index("run")[
         ["persona_dir", "persona", "sistema", "config", "participant", "rep"]
     ]
     runs = runs.set_index("run").join(meta).reset_index()
     runs["algoritmo"] = runs.config.map(ALGORITHM)
     runs["elitismo"] = runs.config.map(ELITISM)
+    runs["restricao"] = runs.config.map(CONSTRAINT)
     return runs
 
 
@@ -179,12 +188,12 @@ def plot_lines(runs: pd.DataFrame, factors: pd.DataFrame) -> None:
                 ax.plot((1, 2, 3), medians, marker="o", color=COLORS[algorithm],
                         label=algorithm, linewidth=1.5, markersize=5)
             line = factors[(factors.persona == persona) & (factors.sistema == system)
-                           & (factors.desfecho == "N")].iloc[0]
+                           & (factors.desfecho == "C")].iloc[0]
             ax.set_xticks((1, 2, 3))
             ax.set_xticklabels(("+25", "+100", "próxima\ninteração"), fontsize=8)
             ax.set_title(f"{persona} · {'Spring PetClinic' if system == 'spring-petclinic' else 'JPetStore'}",
                          fontsize=10)
-            ax.text(0.5, 0.04, f"$p_{{adj}}$ (2ª interação) = {line.p_adj:.3f}",
+            ax.text(0.5, 0.04, f"$p_{{adj}}$ (+100) = {line.p_adj:.3f}",
                     transform=ax.transAxes, ha="center", fontsize=8)
             ax.set_ylim(0.5, 1.0)
             ax.grid(axis="y", alpha=0.25)
@@ -210,6 +219,16 @@ def main() -> None:
     by_elitism = factor_table(runs, "elitismo")
     by_elitism.to_csv(os.path.join(ROOT, "fatores_elitismo.csv"), index=False)
 
+    by_constraint = factor_table(runs, "restricao")
+    by_constraint.to_csv(os.path.join(ROOT, "fatores_restricao.csv"), index=False)
+
+    types = runs.melt(
+        id_vars=["persona", "sistema", "algoritmo", "config"],
+        value_vars=["C_CO_LOCATE", "C_SEPARATE", "S_CO_LOCATE", "S_SEPARATE"],
+        var_name="medida", value_name="valor",
+    ).groupby(["persona", "sistema", "algoritmo", "medida"]).valor.median().reset_index()
+    types.to_csv(os.path.join(ROOT, "tipos.csv"), index=False)
+
     configs = runs.groupby(["persona", "sistema", "config"]).agg(
         runs=("C", "size"), A=("A", "median"), C=("C", "median"), N=("N", "median")
     ).reset_index()
@@ -230,6 +249,8 @@ def main() -> None:
     print(by_algorithm.round(3).to_string(index=False))
     print("\n== elitismo ==")
     print(by_elitism.round(3).to_string(index=False))
+    print("\n== restricao ==")
+    print(by_constraint.round(3).to_string(index=False))
     print("\n== 2x2 ==")
     print(two_by_two.round(3).to_string(index=False))
 
