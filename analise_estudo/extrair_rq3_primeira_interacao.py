@@ -65,6 +65,8 @@ def main() -> None:
     args = parse_args()
     zips_root = args.zips
     out = args.out
+    if not os.path.isdir(zips_root):
+        raise SystemExit(f"diretório de ZIPs não encontrado: {zips_root}")
     os.makedirs(out, exist_ok=True)
     rows = []
     for path in sorted(glob.glob(os.path.join(zips_root, "**", "*.zip"), recursive=True)):
@@ -117,6 +119,8 @@ def main() -> None:
             row["strict_N"] = strict
             rows.append(row)
 
+    if not rows:
+        raise SystemExit("nenhuma intenção encontrada; verifique --zips")
     with open(os.path.join(out, "intents.csv"), "w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
         writer.writeheader()

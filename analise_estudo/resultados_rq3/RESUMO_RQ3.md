@@ -7,8 +7,9 @@
 
 - **Coorte:** intenções estruturais criadas na **primeira interação** de cada execução.
 - **Execuções:** 240 no total; **231** com intenção estrutural na primeira interação.
-  - 9 excluídas: 8 porque a primeira operação estrutural ocorreu em uma interação posterior
-    (550/800/300/450) e 1 porque só houve congelamento na primeira interação.
+  - 9 excluídas: 7 sem intenção estrutural na primeira (primeira intenção em interação
+    posterior), 1 só com congelamento na primeira (estrutural em 300) e 1 sem nenhuma intenção
+    estrutural.
 - **Intenções:** 16.447 (16.123 `SEPARATE`, 324 `CO_LOCATE`); mediana de 65 por run (9–229).
 - **Freeze:** 34 intenções de congelamento do primeiro evento ficam fora; a análise é
   `STRUCTURAL`.
